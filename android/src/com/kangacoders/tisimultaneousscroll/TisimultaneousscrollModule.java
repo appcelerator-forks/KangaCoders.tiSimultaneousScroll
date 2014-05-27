@@ -8,55 +8,119 @@
  */
 package com.kangacoders.tisimultaneousscroll;
 
+import java.util.ArrayList;
+
+import org.appcelerator.kroll.KrollDict;
 import org.appcelerator.kroll.KrollModule;
 import org.appcelerator.kroll.annotations.Kroll;
 
 import org.appcelerator.titanium.TiApplication;
+import org.appcelerator.titanium.TiC;
+import org.appcelerator.titanium.proxy.TiViewProxy;
+import org.appcelerator.titanium.util.TiConvert;
 import org.appcelerator.kroll.common.Log;
 
-@Kroll.module(name="Tisimultaneousscroll", id="com.kangacoders.tisimultaneousscroll")
-public class TisimultaneousscrollModule extends KrollModule
-{
+import android.app.Activity;
+import android.util.DisplayMetrics;
+
+import ti.modules.titanium.ui.ScrollViewProxy;
+
+@Kroll.module(name = "Tisimultaneousscroll", id = "com.kangacoders.tisimultaneousscroll")
+public class TisimultaneousscrollModule extends KrollModule implements
+		ScrollViewListener {
 
 	// Standard Debugging variables
 	private static final String TAG = "TisimultaneousscrollModule";
+	private static DisplayMetrics metrics = new DisplayMetrics();
+	private ArrayList<TiViewProxy> scroll_views = new ArrayList<TiViewProxy>();
+	private ArrayList<TiViewProxy> floating_labels = new ArrayList<TiViewProxy>();
 
 	// You can define constants with @Kroll.constant, for example:
 	// @Kroll.constant public static final String EXTERNAL_NAME = value;
-	
-	public TisimultaneousscrollModule()
-	{
+
+	public TisimultaneousscrollModule() {
 		super();
 	}
 
 	@Kroll.onAppCreate
-	public static void onAppCreate(TiApplication app)
-	{
+	public static void onAppCreate(TiApplication app) {
 		Log.d(TAG, "inside onAppCreate");
-		// put module init code that needs to run when the application is created
+		// put module init code that needs to run when the application is
+		// created
 	}
 
 	// Methods
 	@Kroll.method
-	public String example()
-	{
-		Log.d(TAG, "example called");
-		return "hello world";
+	public void bind_scrolls(KrollDict _params) {
+		TiApplication appContext = TiApplication.getInstance();
+		Activity activity = appContext.getCurrentActivity();
+		activity.getWindowManager().getDefaultDisplay().getMetrics(metrics);
+
+		Object[] _scroll_views = (Object[]) _params.get("scroll_views");
+		Object[] _floating_labels = (Object[]) _params.get("floating_labels");
+
+		KangaScrollViewProxy master = null;
+
+		for (int i = 0; i < _scroll_views.length; i++) {
+			TiViewProxy proxy = (TiViewProxy) _scroll_views[i];
+			scroll_views.add(proxy);
+			if (proxy instanceof KangaScrollViewProxy) {
+				master = (KangaScrollViewProxy) proxy;
+			}
+		}
+
+		for (int i = 0; i < _floating_labels.length; i++) {
+			TiViewProxy proxy = (TiViewProxy) _floating_labels[i];
+			floating_labels.add(proxy);
+		}
+
+		if (master != null)
+			master.getNativeView().setScrollViewListener(this);
 	}
-	
-	// Properties
-	@Kroll.getProperty
-	public String getExampleProp()
-	{
-		Log.d(TAG, "get example property");
-		return "hello world";
+
+	@Kroll.method
+	public void scroll_to(KrollDict _params) {
+
+		int _x = TiConvert.toInt(_params.get("x"));
+		int _y = TiConvert.toInt(_params.get("y"));
+
+		scroll_to(_x, _y, true);
 	}
-	
-	
-	@Kroll.setProperty
-	public void setExampleProp(String value) {
-		Log.d(TAG, "set example property: " + value);
+
+	@Override
+	public void onScrollChanged(Kanga2DScrollView scrollView, int x, int y) {
+		scroll_to(x, 0, false); // only horizontal
+	}
+
+	private void scroll_to(int _x, int _y, boolean _force) {
+		try {
+			for (int i = 0; i < scroll_views.size(); i++) {
+				TiViewProxy proxy = scroll_views.get(i);
+				if (proxy instanceof ScrollViewProxy) {
+					((ScrollViewProxy) proxy).scrollTo(_x, _y);
+				} else if (_force == true
+						&& proxy instanceof KangaScrollViewProxy) {
+					((KangaScrollViewProxy) proxy).scrollTo(_x, _y);
+				}
+			}
+			float_labels(_x, _y);
+		} catch (Exception e) {
+		}
+		;
+	}
+
+	private void float_labels(int _x, int _y) {
+		if (_x < 0)
+			_x = 0;
+		if (_y < 0)
+			_y = 0;
+
+		for (int i = 0; i < floating_labels.size(); i++) {
+			TiViewProxy proxy = floating_labels.get(i);
+			proxy.setPropertyAndFire(TiC.PROPERTY_LEFT, _x / metrics.density);
+			proxy.setPropertyAndFire(TiC.PROPERTY_TOP, _y / metrics.density);
+		}
+
 	}
 
 }
-

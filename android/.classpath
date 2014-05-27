@@ -13,5 +13,6 @@
 			<attribute name="optional" value="true"/>
 		</attributes>
 	</classpathentry>
+	<classpathentry kind="lib" path="/Users/kdesutter/Library/Application Support/Titanium/mobilesdk/osx/3.2.2.GA/android/modules/titanium-ui.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

@@ -8,9 +8,6 @@ import org.appcelerator.kroll.common.Log;
 import org.appcelerator.titanium.TiC;
 import org.appcelerator.titanium.util.TiConvert;
 import org.appcelerator.titanium.view.TiUIView;
-import org.appcelerator.titanium.view.TiCompositeLayout.LayoutArrangement;
-
-import android.os.Build;
 import android.view.View;
 
 public class KangaScrollView extends TiUIView {
@@ -21,7 +18,7 @@ public class KangaScrollView extends TiUIView {
 		super(kangaScrollViewProxy);
 		getLayoutParams().autoFillsHeight = true;
 		getLayoutParams().autoFillsWidth = true;
-		View view = new Kanga2DScrollView(kangaScrollViewProxy.getActivity());
+		Kanga2DScrollView view = new Kanga2DScrollView(kangaScrollViewProxy.getActivity());
 		setNativeView(view);
 	}
 
@@ -44,6 +41,7 @@ public class KangaScrollView extends TiUIView {
 			HashMap contentOffset = (HashMap) hashMap;
 			offsetX = TiConvert.toInt(contentOffset, TiC.PROPERTY_X);
 			offsetY = TiConvert.toInt(contentOffset, TiC.PROPERTY_Y);
+			setContentOffset(offsetX, offsetY);
 		} else {
 			Log.e(TAG, "ContentOffset must be an instance of HashMap");
 		}
