@@ -74,7 +74,7 @@ public class KangaScrollViewProxy extends TiViewProxy
 	public void handleScrollTo(int x, int y) {
 		getScrollView().scrollTo(x, y);
 	}
-	
+
 	public Kanga2DScrollView getNativeView() {
 		return (Kanga2DScrollView) getScrollView().getNativeView();
 	}

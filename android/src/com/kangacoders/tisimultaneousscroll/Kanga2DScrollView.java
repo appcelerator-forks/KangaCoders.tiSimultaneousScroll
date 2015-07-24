@@ -1,9 +1,17 @@
 package com.kangacoders.tisimultaneousscroll;
 
+import org.appcelerator.kroll.KrollDict;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import android.content.Context;
+import android.content.pm.PackageManager;
+import android.util.Log;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
+import android.view.ScaleGestureDetector;
+import android.view.ScaleGestureDetector.SimpleOnScaleGestureListener;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
@@ -21,18 +29,21 @@ import android.widget.TextView;
  * complex hierarchy of objects. A child that is often used is a
  * {@link LinearLayout} in a vertical orientation, presenting a vertical array
  * of top-level items that the user can scroll through.
- * 
+ *
  * <p>
  * The {@link TextView} class also takes care of its own scrolling, so does not
  * require a TwoDScrollView, but using the two together is possible to achieve
  * the effect of a text view within a larger container.
- * 
+ *
  * <p>
  * TwoDScrollView only supports vertical scrolling.
  */
 public class Kanga2DScrollView extends FrameLayout {
 	static final int ANIMATED_SCROLL_GAP = 250;
 	static final float MAX_SCROLL_FACTOR = 0.5f;
+
+	private float maxZoom = 2.f;
+	private float minZoom = 0.1f;
 
 	private com.kangacoders.tisimultaneousscroll.ScrollViewListener scrollViewListener = null;
 
@@ -63,21 +74,34 @@ public class Kanga2DScrollView extends FrameLayout {
 	private int mTouchSlop;
 	private int mMinimumVelocity;
 
+	private static final int INVALID_POINTER_ID = -1;
+	private int activePointerId;
+	private ScaleGestureDetector pinchDetector;
+	private float scaleFactor = 1.f;
+	private float lastX, lastY;
+	private KangaScrollViewProxy proxy;
+
 	// private int mMaximumVelocity;
 
 	public Kanga2DScrollView(Context context) {
 		super(context);
-		initTwoDScrollView();
+		initTwoDScrollView(context);
+	}
+
+	public Kanga2DScrollView(Context context, KangaScrollViewProxy kangaScrollViewProxy) {
+		super(context);
+		proxy = kangaScrollViewProxy;
+		initTwoDScrollView(context);
 	}
 
 	public Kanga2DScrollView(Context context, AttributeSet attrs) {
 		super(context, attrs);
-		initTwoDScrollView();
+		initTwoDScrollView(context);
 	}
 
 	public Kanga2DScrollView(Context context, AttributeSet attrs, int defStyle) {
 		super(context, attrs, defStyle);
-		initTwoDScrollView();
+		initTwoDScrollView(context);
 	}
 
 	@Override
@@ -140,24 +164,27 @@ public class Kanga2DScrollView extends FrameLayout {
 		return 1.0f;
 	}
 
-	private void initTwoDScrollView() {
+	private void initTwoDScrollView(Context context) {
 		mScroller = new Scroller(getContext());
 		setFocusable(true);
 		setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
 		setWillNotDraw(false);
 		final ViewConfiguration configuration = ViewConfiguration
-				.get(getContext());
+		.get(getContext());
 		mTouchSlop = configuration.getScaledTouchSlop();
 		mMinimumVelocity = configuration.getScaledMinimumFlingVelocity();
 		// mMaximumVelocity = mMinimumVelocity *
 		// 5;//configuration.getScaledMaximumFlingVelocity();
+
+		if(context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH))
+			pinchDetector = new ScaleGestureDetector(context, new ScaleListener());
 	}
 
 	@Override
 	public void addView(View child) {
 		if (getChildCount() > 0) {
 			throw new IllegalStateException(
-					"TwoDScrollView can host only one direct child");
+				"TwoDScrollView can host only one direct child");
 		}
 
 		super.addView(child);
@@ -167,7 +194,7 @@ public class Kanga2DScrollView extends FrameLayout {
 	public void addView(View child, int index) {
 		if (getChildCount() > 0) {
 			throw new IllegalStateException(
-					"TwoDScrollView can host only one direct child");
+				"TwoDScrollView can host only one direct child");
 		}
 
 		super.addView(child, index);
@@ -177,7 +204,7 @@ public class Kanga2DScrollView extends FrameLayout {
 	public void addView(View child, ViewGroup.LayoutParams params) {
 		if (getChildCount() > 0) {
 			throw new IllegalStateException(
-					"TwoDScrollView can host only one direct child");
+				"TwoDScrollView can host only one direct child");
 		}
 
 		super.addView(child, params);
@@ -187,7 +214,7 @@ public class Kanga2DScrollView extends FrameLayout {
 	public void addView(View child, int index, ViewGroup.LayoutParams params) {
 		if (getChildCount() > 0) {
 			throw new IllegalStateException(
-					"TwoDScrollView can host only one direct child");
+				"TwoDScrollView can host only one direct child");
 		}
 
 		super.addView(child, index, params);
@@ -202,9 +229,9 @@ public class Kanga2DScrollView extends FrameLayout {
 			int childHeight = child.getHeight();
 			int childWidth = child.getWidth();
 			return (getHeight() < childHeight + getPaddingTop()
-					+ getPaddingBottom())
-					|| (getWidth() < childWidth + getPaddingLeft()
-							+ getPaddingRight());
+				+ getPaddingBottom())
+			|| (getWidth() < childWidth + getPaddingLeft()
+				+ getPaddingRight());
 		}
 		return false;
 	}
@@ -235,7 +262,7 @@ public class Kanga2DScrollView extends FrameLayout {
 		final float x = ev.getX();
 
 		switch (action) {
-		case MotionEvent.ACTION_MOVE:
+			case MotionEvent.ACTION_MOVE:
 			/*
 			 * mIsBeingDragged == false, otherwise the shortcut would have
 			 * caught it. Check whether the user has moved far enough from his
@@ -253,7 +280,7 @@ public class Kanga2DScrollView extends FrameLayout {
 			}
 			break;
 
-		case MotionEvent.ACTION_DOWN:
+			case MotionEvent.ACTION_DOWN:
 			/* Remember location of down touch */
 			mLastMotionY = y;
 			mLastMotionX = x;
@@ -266,8 +293,8 @@ public class Kanga2DScrollView extends FrameLayout {
 			mIsBeingDragged = !mScroller.isFinished();
 			break;
 
-		case MotionEvent.ACTION_CANCEL:
-		case MotionEvent.ACTION_UP:
+			case MotionEvent.ACTION_CANCEL:
+			case MotionEvent.ACTION_UP:
 			/* Release the drag */
 			mIsBeingDragged = false;
 			break;
@@ -304,7 +331,7 @@ public class Kanga2DScrollView extends FrameLayout {
 		final float x = ev.getX();
 
 		switch (action) {
-		case MotionEvent.ACTION_DOWN:
+			case MotionEvent.ACTION_DOWN:
 			/*
 			 * If being flinged and user touches, stop the fling. isFinished
 			 * will be false if being flinged.
@@ -317,45 +344,47 @@ public class Kanga2DScrollView extends FrameLayout {
 			mLastMotionY = y;
 			mLastMotionX = x;
 			break;
-		case MotionEvent.ACTION_MOVE:
+			case MotionEvent.ACTION_MOVE:
 			// Scroll to follow the motion event
 			int deltaX = (int) (mLastMotionX - x);
 			int deltaY = (int) (mLastMotionY - y);
 			mLastMotionX = x;
 			mLastMotionY = y;
 
-			if (deltaX < 0) {
-				if (getScrollX() < 0) {
-					deltaX = 0;
+			if(!pinchDetector.isInProgress()){
+				if (deltaX < 0) {
+					if (getScrollX() < 0) {
+						deltaX = 0;
+					}
+				} else if (deltaX > 0) {
+					final int rightEdge = getWidth() - getPaddingRight();
+					final int availableToScroll = getChildAt(0).getRight()
+					- getScrollX() - rightEdge;
+					if (availableToScroll > 0) {
+						deltaX = Math.min(availableToScroll, deltaX);
+					} else {
+						deltaX = 0;
+					}
 				}
-			} else if (deltaX > 0) {
-				final int rightEdge = getWidth() - getPaddingRight();
-				final int availableToScroll = getChildAt(0).getRight()
-						- getScrollX() - rightEdge;
-				if (availableToScroll > 0) {
-					deltaX = Math.min(availableToScroll, deltaX);
-				} else {
-					deltaX = 0;
+				if (deltaY < 0) {
+					if (getScrollY() < 0) {
+						deltaY = 0;
+					}
+				} else if (deltaY > 0) {
+					final int bottomEdge = getHeight() - getPaddingBottom();
+					final int availableToScroll = getChildAt(0).getBottom()
+					- getScrollY() - bottomEdge;
+					if (availableToScroll > 0) {
+						deltaY = Math.min(availableToScroll, deltaY);
+					} else {
+						deltaY = 0;
+					}
 				}
+				if (deltaY != 0 || deltaX != 0)
+					scrollBy(deltaX, deltaY);
 			}
-			if (deltaY < 0) {
-				if (getScrollY() < 0) {
-					deltaY = 0;
-				}
-			} else if (deltaY > 0) {
-				final int bottomEdge = getHeight() - getPaddingBottom();
-				final int availableToScroll = getChildAt(0).getBottom()
-						- getScrollY() - bottomEdge;
-				if (availableToScroll > 0) {
-					deltaY = Math.min(availableToScroll, deltaY);
-				} else {
-					deltaY = 0;
-				}
-			}
-			if (deltaY != 0 || deltaX != 0)
-				scrollBy(deltaX, deltaY);
 			break;
-		case MotionEvent.ACTION_UP:
+			case MotionEvent.ACTION_UP:
 			final VelocityTracker velocityTracker = mVelocityTracker;
 			velocityTracker.computeCurrentVelocity(1000);
 			// velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
@@ -363,23 +392,23 @@ public class Kanga2DScrollView extends FrameLayout {
 			int initialYVelocity = (int) velocityTracker.getYVelocity();
 
 			if ((Math.abs(initialXVelocity) + Math.abs(initialYVelocity) > mMinimumVelocity)
-					&& getChildCount() > 0) {
+				&& getChildCount() > 0) {
 				fling(-initialXVelocity, -initialYVelocity);
-			}
-
-			if (mVelocityTracker != null) {
-				mVelocityTracker.recycle();
-				mVelocityTracker = null;
-			}
 		}
-		return true;
+
+		if (mVelocityTracker != null) {
+			mVelocityTracker.recycle();
+			mVelocityTracker = null;
+		}
 	}
+	return true;
+}
 
 	/**
 	 * <p>
 	 * Handles scrolling in response to a "home/end" shortcut press.
 	 * </p>
-	 * 
+	 *
 	 * @param direction
 	 *            the scroll direction: {@link android.view.View#FOCUS_UP} to go
 	 *            the top of the view or {@link android.view.View#FOCUS_DOWN} to
@@ -390,10 +419,10 @@ public class Kanga2DScrollView extends FrameLayout {
 		int scrollAmountY = 0, scrollAmountX = 0;
 		// vertical
 		switch (direction_vert) {
-		case View.FOCUS_UP:
+			case View.FOCUS_UP:
 			scrollAmountY = -getScrollY();
 			break;
-		case View.FOCUS_DOWN:
+			case View.FOCUS_DOWN:
 			int count = getChildCount();
 			if (count > 0) {
 				View view = getChildAt(count - 1);
@@ -403,10 +432,10 @@ public class Kanga2DScrollView extends FrameLayout {
 		}
 		// horizontal
 		switch (direction_horz) {
-		case View.FOCUS_LEFT:
+			case View.FOCUS_LEFT:
 			scrollAmountX = -getScrollX();
 			break;
-		case View.FOCUS_RIGHT:
+			case View.FOCUS_RIGHT:
 			int count = getChildCount();
 			if (count > 0) {
 				View view = getChildAt(count - 1);
@@ -422,7 +451,7 @@ public class Kanga2DScrollView extends FrameLayout {
 
 	/**
 	 * Smooth scroll by a Y delta
-	 * 
+	 *
 	 * @param delta
 	 *            the number of pixels to scroll by on the Y axis
 	 */
@@ -434,7 +463,7 @@ public class Kanga2DScrollView extends FrameLayout {
 
 	/**
 	 * Like {@link View#scrollBy}, but scroll smoothly instead of immediately.
-	 * 
+	 *
 	 * @param dx
 	 *            the number of pixels to scroll by on the X axis
 	 * @param dy
@@ -458,7 +487,7 @@ public class Kanga2DScrollView extends FrameLayout {
 
 	/**
 	 * Like {@link #scrollTo}, but scroll smoothly instead of immediately.
-	 * 
+	 *
 	 * @param x
 	 *            the position where to scroll on the X axis
 	 * @param y
@@ -488,34 +517,34 @@ public class Kanga2DScrollView extends FrameLayout {
 
 	@Override
 	protected void measureChild(View child, int parentWidthMeasureSpec,
-			int parentHeightMeasureSpec) {
+		int parentHeightMeasureSpec) {
 		ViewGroup.LayoutParams lp = child.getLayoutParams();
 
 		int childWidthMeasureSpec;
 		int childHeightMeasureSpec;
 
 		childWidthMeasureSpec = getChildMeasureSpec(parentWidthMeasureSpec,
-				getPaddingLeft() + getPaddingRight(), lp.width);
+			getPaddingLeft() + getPaddingRight(), lp.width);
 		childHeightMeasureSpec = MeasureSpec.makeMeasureSpec(0,
-				MeasureSpec.UNSPECIFIED);
+			MeasureSpec.UNSPECIFIED);
 
 		child.measure(childWidthMeasureSpec, childHeightMeasureSpec);
 	}
 
 	@Override
 	protected void measureChildWithMargins(View child,
-			int parentWidthMeasureSpec, int widthUsed,
-			int parentHeightMeasureSpec, int heightUsed) {
+		int parentWidthMeasureSpec, int widthUsed,
+		int parentHeightMeasureSpec, int heightUsed) {
 		final MarginLayoutParams lp = (MarginLayoutParams) child
-				.getLayoutParams();
+		.getLayoutParams();
 		final int childWidthMeasureSpec = MeasureSpec.makeMeasureSpec(
-				lp.leftMargin + lp.rightMargin, MeasureSpec.UNSPECIFIED);
+			lp.leftMargin + lp.rightMargin, MeasureSpec.UNSPECIFIED);
 		// final int childWidthMeasureSpec =
 		// getChildMeasureSpec(parentWidthMeasureSpec,
 		// getPaddingLeft() + getPaddingRight() + lp.leftMargin + lp.rightMargin
 		// + widthUsed, lp.width);
 		final int childHeightMeasureSpec = MeasureSpec.makeMeasureSpec(
-				lp.topMargin + lp.bottomMargin, MeasureSpec.UNSPECIFIED);
+			lp.topMargin + lp.bottomMargin, MeasureSpec.UNSPECIFIED);
 
 		child.measure(childWidthMeasureSpec, childHeightMeasureSpec);
 	}
@@ -550,10 +579,10 @@ public class Kanga2DScrollView extends FrameLayout {
 			if (getChildCount() > 0) {
 				View child = getChildAt(0);
 				scrollTo(
-						clamp(x, getWidth() - getPaddingRight()
-								- getPaddingLeft(), child.getWidth()),
-						clamp(y, getHeight() - getPaddingBottom()
-								- getPaddingTop(), child.getHeight()));
+					clamp(x, getWidth() - getPaddingRight()
+						- getPaddingLeft(), child.getWidth()),
+					clamp(y, getHeight() - getPaddingBottom()
+						- getPaddingTop(), child.getHeight()));
 			} else {
 				scrollTo(x, y);
 			}
@@ -587,7 +616,7 @@ public class Kanga2DScrollView extends FrameLayout {
 
 	/**
 	 * Fling the scroll view
-	 * 
+	 *
 	 * @param velocityY
 	 *            The initial velocity in the Y direction. Positive numbers mean
 	 *            that the finger/curor is moving down the screen, which means
@@ -610,7 +639,7 @@ public class Kanga2DScrollView extends FrameLayout {
 
 	/**
 	 * {@inheritDoc}
-	 * 
+	 *
 	 * <p>
 	 * This version also clamps the scrolling to the bounds of our child.
 	 */
@@ -619,9 +648,9 @@ public class Kanga2DScrollView extends FrameLayout {
 		if (getChildCount() > 0) {
 			View child = getChildAt(0);
 			x = clamp(x, getWidth() - getPaddingRight() - getPaddingLeft(),
-					child.getWidth());
+				child.getWidth());
 			y = clamp(y, getHeight() - getPaddingBottom() - getPaddingTop(),
-					child.getHeight());
+				child.getHeight());
 			if (x != getScrollX() || y != getScrollY()) {
 				super.scrollTo(x, y);
 			}
@@ -638,7 +667,7 @@ public class Kanga2DScrollView extends FrameLayout {
 			 * |------ child ------| or |--------------- me ---------------|
 			 * |------ child ------| or |--------------- me ---------------|
 			 * |------ child ------|
-			 * 
+			 *
 			 * n < 0 is this case: |------ me ------| |-------- child --------|
 			 * |-- mScrollX --|
 			 */
@@ -653,4 +682,28 @@ public class Kanga2DScrollView extends FrameLayout {
 		}
 		return n;
 	}
+
+	private class ScaleListener extends SimpleOnScaleGestureListener {
+		@Override
+		public boolean onScale(ScaleGestureDetector detector) {
+			scaleFactor *= detector.getScaleFactor();
+
+			scaleFactor = Math.max(minZoom, Math.min(scaleFactor, maxZoom));
+			invalidate();
+
+			JSONObject json = new JSONObject();
+			KrollDict eventData = null;
+			try {
+				json.put("scale", scaleFactor);
+				eventData = new KrollDict(json);
+			} catch (JSONException e) {
+				Log.e("PinchView:onScale", e.getMessage());
+			}
+
+			proxy.fireEvent("pinch", eventData);
+
+			return true;
+		}
+	}
+
 }

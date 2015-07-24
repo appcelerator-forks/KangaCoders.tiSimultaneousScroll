@@ -18,7 +18,7 @@ public class KangaScrollView extends TiUIView {
 		super(kangaScrollViewProxy);
 		getLayoutParams().autoFillsHeight = true;
 		getLayoutParams().autoFillsWidth = true;
-		Kanga2DScrollView view = new Kanga2DScrollView(kangaScrollViewProxy.getActivity());
+		Kanga2DScrollView view = new Kanga2DScrollView(kangaScrollViewProxy.getActivity(), kangaScrollViewProxy);
 		setNativeView(view);
 	}
 
@@ -26,7 +26,7 @@ public class KangaScrollView extends TiUIView {
 		getNativeView().scrollTo(x, y);
 		getNativeView().computeScroll();
 	}
-	
+
 	public void setContentOffset(int x, int y) {
 		KrollDict offset = new KrollDict();
 		offsetX = x;
@@ -35,7 +35,7 @@ public class KangaScrollView extends TiUIView {
 		offset.put(TiC.EVENT_PROPERTY_Y, offsetY);
 		getProxy().setProperty(TiC.PROPERTY_CONTENT_OFFSET, offset);
 	}
-	
+
 	public void setContentOffset(Object hashMap) {
 		if (hashMap instanceof HashMap) {
 			HashMap contentOffset = (HashMap) hashMap;
@@ -60,7 +60,7 @@ public class KangaScrollView extends TiUIView {
 		}
 		super.propertyChanged(key, oldValue, newValue, proxy);
 	}
-	
+
 	@Override
 	public void processProperties(KrollDict d) {
 		if (d.containsKey(TiC.PROPERTY_CONTENT_OFFSET)) {
